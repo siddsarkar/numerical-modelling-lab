@@ -17,6 +17,16 @@
 - `trapezoidal_f1.png` - Plot of Trapezoidal Rule for Function 1
 - `trapezoidal_f2.png` - Plot of Trapezoidal Rule for Function 2
 
-### Libraries
+### Libraries Used
 
 - Plotting library - [pbPlots](https://github.com/InductiveComputerScience/pbPlots)
+
+### References
+
+- **Trapezoidal Rule - Formula | Trapezoidal Formula**
+
+  Trapezoidal Rule - Formula | Trapezoidal Formula. (2022). Retrieved 20 August 2022, from [https://www.cuemath.com/trapezoidal-rule-formula/](https://www.cuemath.com/trapezoidal-rule-formula/)
+
+- **Simpsons Rule - Formula | Simpsons Formula**
+
+  Simpsons Rule - Formula | Simpsons Formula. (2022). Retrieved 20 August 2022, from [https://www.cuemath.com/simpsons-rule-formula/](https://www.cuemath.com/trapezoidal-rule-formula/)

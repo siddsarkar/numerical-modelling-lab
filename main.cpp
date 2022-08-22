@@ -1,3 +1,4 @@
+#include <iomanip>
 #include "pbPlot/pbPlots.hpp"
 #include "pbPlot/supportLib.hpp"
 
@@ -158,6 +159,34 @@ int main() {
         }
     }
 
+
+    cout << "Trapezoidal Rule: Function 1" << endl;
+    cout << "T10=" << fixed << setprecision(4) << trapezoidal(10, F1::eval, 1, 2) << " E10=" << fixed << setprecision(4)
+         << abs(trapezoidal(10, F1::eval, 1, 2) - F1::TV) / F1::TV * 100 << endl;
+    cout << "T100=" << fixed << setprecision(4) << trapezoidal(100, F1::eval, 1, 2) << " E100=" << fixed
+         << setprecision(4) << abs(trapezoidal(100, F1::eval, 1, 2) - F1::TV) / F1::TV * 100 << endl;
+
+
+    cout << endl << "Simpsons Rule: Function 1" << endl;
+    cout << "T10=" << fixed << setprecision(4) << simpsons(10, F1::eval, 1, 2) << " E10=" << fixed << setprecision(7)
+         << abs(simpsons(10, F1::eval, 1, 2) - F1::TV) / F1::TV * 100 << endl;
+    cout << "T100=" << fixed << setprecision(7) << simpsons(100, F1::eval, 1, 2) << " E100=" << fixed << setprecision(7)
+         << abs(simpsons(100, F1::eval, 1, 2) - F1::TV) / F1::TV * 100 << endl;
+
+    cout << endl << "Trapezoidal Rule: Function 2" << endl;
+    cout << "T10=" << fixed << setprecision(4) << trapezoidal(10, F2::eval, exp(1), 5) << " E10=" << fixed
+         << setprecision(4) << abs(trapezoidal(10, F2::eval, exp(1), 5) - F2::TV) / F2::TV * 100 << endl;
+    cout << "T100=" << fixed << setprecision(4) << trapezoidal(100, F2::eval, exp(1), 5) << " E100=" << fixed
+         << setprecision(4) << abs(trapezoidal(100, F2::eval, exp(1), 5) - F2::TV) / F2::TV * 100 << endl;
+
+    cout << endl << "Simpsons Rule: Function 2" << endl;
+    cout << "T10=" << fixed << setprecision(4) << simpsons(10, F2::eval, exp(1), 5) << " E10=" << fixed
+         << setprecision(9) << abs(simpsons(10, F2::eval, exp(1), 5) - F2::TV) / F2::TV * 100 << endl;
+    cout << "T100=" << fixed << setprecision(7) << simpsons(100, F2::eval, exp(1), 5) << " E100=" << fixed
+         << setprecision(9) << abs(simpsons(100, F2::eval, exp(1), 5) - F2::TV) / F2::TV * 100 << endl;
+
+
+    cout << endl << "Generating plots..." << endl;
     plot(xt, ytf1, 1, "trapezoidal")
     ? cout << "Trapezoidal rule for f1 succeeded" << endl
     : cerr << "Trapezoidal rule for f1 failed" << endl;
