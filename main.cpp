@@ -1,207 +1,177 @@
+#include <cassert>
 #include <iomanip>
-#include "pbPlot/pbPlots.hpp"
-#include "pbPlot/supportLib.hpp"
+#include <numeric>
+#include <vector>
+#include <iostream>
+#include <valarray>
 
 using namespace std;
 
-/**
- * Problem 1: f(x) = 4e^4x + 3e^3x + 2e^2x + e^x, x in [1,2]
- */
-class F1 {
+template<typename T>
+class LeastSquares {
 public:
-    constexpr static double TV = 3361.582962;
+    LeastSquares(const vector<T> &x, const vector<T> &y) {
+        assert(x.size() == y.size());
 
-    static double eval(double x) {
-        return (4 * exp(4 * x)) + (3 * exp(3 * x)) + (2 * exp(2 * x)) + exp(x);
+        n = x.size();
+        sum_x = accumulate(x.begin(), x.end(), 0.0);
+        sum_y = accumulate(y.begin(), y.end(), 0.0);
+        sum_x2 = accumulate(x.begin(), x.end(), 0.0,
+                            [](double a, double b) { return a + b * b; });
+        sum_xy = 0.0;
+        for (int i = 0; i < n; ++i) sum_xy += x[i] * y[i];
     }
+
+    double m() {
+        return (sum_y * sum_x2 - sum_x * sum_xy) / (n * sum_x2 - sum_x * sum_x);
+    }
+
+    double c() {
+        return (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x);
+    }
+
+private:
+    int n;
+    double sum_x, sum_y, sum_x2, sum_xy;
 };
 
-/**
- * Problem 2: f(x) = x^3 + 2x + 1/x, x in [e,5]
- */
-class F2 {
+template<typename T>
+class NewtonRaphson {
 public:
-    constexpr static double TV = 160.8208443;
-
-    static double eval(double x) {
-        return pow(x, 3) + 2 * x + 1 / x;
+    double solve(auto f, auto fd, double x0, double eps) {
+        double x1 = x0 - f(x0) / fd(x0);
+        try {
+            while (abs(x1 - x0) > eps) {
+                x0 = x1;
+                x1 = x0 - f(x0) / fd(x0);
+            }
+        } catch (...) {
+            cout << "Error: " << x0 << endl;
+        }
+        return x1;
     }
 };
-
-/**
- * @brief Calculates the integral of f(x) from a to b using the trapezoidal rule.
- *
- * @param n - number of intervals
- * @param a - the lower bound of the integral
- * @param b - the upper bound of the integral
- * @param f - the function to integrate
- * @return the area under the curve
- */
-double trapezoidal(int n, double (*f)(double), double a, double b) {
-    double h = (b - a) / n;
-
-    double Tn = f(a) + f(b);        // first and last term
-    for (int i = 1; i < n; ++i)      // middle terms
-        Tn += 2 * f(a + i * h);
-    Tn *= h / 2;
-
-    return Tn;
-}
-
-/**
- * @brief Calculates the integral of f(x) from a to b using the Simpson's ⅓ rule.
- *
- * @param n - number of intervals
- * @param a - the lower bound of the integral
- * @param b - the upper bound of the integral
- * @param f - the function to integrate
- * @return the area under the curve
- */
-double simpsons(int n, double (*f)(double), double a, double b) {
-    double h = (b - a) / n;
-
-    double Tn = f(a) + f(b);        // first and last term
-    for (int i = 1; i < n; ++i)
-        if (i % 2)
-            Tn += 4 * f(a + i * h);     // odd terms
-        else
-            Tn += 2 * f(a + i * h);     // even terms
-    Tn *= h / 3;
-
-    return Tn;
-}
-
-/**
- * @brief Use pbPlot library to plot the percent error vs. n for the given function.
- *
- * @param xs - the x values to plot
- * @param ys - the y values to plot
- * @param fn - function number (1 or 2)
- * @param rule - the rule to use for the integration (trapezoidal or simpsons)
- * @returns true if the plot was successfully generated, false otherwise.
- */
-bool plot(vector<double> &xs, vector<double> &ys, int fn, const string &rule) {
-    bool success;
-    auto *errorMessage = new StringReference();
-
-    RGBABitmapImage *container = CreateImage(900, 600, GetWhite());
-    RGBABitmapImageReference *imageReference = CreateRGBABitmapImageReference();
-
-    ScatterPlotSeries *series = GetDefaultScatterPlotSeriesSettings();
-    series->xs = &xs;
-    series->ys = &ys;
-    series->linearInterpolation = true;
-    series->lineType = toVector(L"dashed");
-    series->lineThickness = 2;
-    series->color = GetBlack();
-
-    ScatterPlotSettings *settings = GetDefaultScatterPlotSettings();
-    settings->width = 900;
-    settings->height = 600;
-    settings->autoBoundaries = true;
-    settings->autoPadding = false;
-    settings->xPadding = 100;
-    settings->yPadding = 75;
-    settings->title = fn == 1
-                      ? rule == "trapezoidal"
-                        ? toVector(L"Function 1 - Trapezoidal Rule")
-                        : toVector(L"Function 1 - Simpsons Rule")
-                      : rule == "simpsons"
-                        ? toVector(L"Function 2 - Simpsons Rule")
-                        : toVector(L"Function 2 - Trapezoidal Rule");
-    settings->xLabel = toVector(L"intervals (n)");
-    settings->yLabel = toVector(L"error (%)");
-    settings->scatterPlotSeries->push_back(series);
-
-    success = DrawScatterPlotFromSettings(imageReference, settings, errorMessage);
-
-    if (success) {
-        DrawImageOnImage(container, imageReference->image, 40, 0);
-
-        vector<double> *pngData = ConvertToPNG(container);
-        WriteToFile(pngData, rule + "_f" + to_string(fn) + ".png");
-        DeleteImage(imageReference->image);
-    } else {
-        cerr << "Error: ";
-        for (wchar_t c: *errorMessage->string)
-            wcerr << c;
-        cerr << endl;
-    }
-
-    return success;
-}
 
 int main() {
-    int n = 100;
+    double FOS = 1.35;
 
-    vector<double> xs, ytf1, ysf1, xt, ytf2, ysf2;
+    cout << "ENTER DESIRED FOS: " << endl;
+    cin >> FOS;
 
-    for (int i = 10; i < n; i += 1) {
-        double err;
+    int n = 4;
 
-        xt.push_back(i);
+    vector<double> size(n);
+    vector<double> strength(n);
 
-        err = abs(trapezoidal(i, F1::eval, 1, 2) - F1::TV) / F1::TV * 100;
-        ytf1.push_back(err);
+    size = {25, 50, 75, 100};
+    strength = {18, 10, 7, 6};
 
-        err = abs(trapezoidal(i, F2::eval, exp(1), 5) - F2::TV) / F2::TV * 100;
-        ytf2.push_back(err);
+    double Wg = 4.5;
+    double Hp = 3.0;
+    double unitWeight = 2.6 * 1e3;
+    double miningHeight = 200.0;
 
-
-        if (!(i % 2)) {
-            xs.push_back(i);
-
-            err = abs(simpsons(i, F2::eval, exp(1), 5) - F2::TV) / F2::TV * 100;
-            ysf2.push_back(err);
-
-            err = abs(simpsons(i, F1::eval, 1, 2) - F1::TV) / F1::TV * 100;
-            ysf1.push_back(err);
-        }
+    vector<double> y, x;
+    for (int i = 0; i < n; i++) {
+        y.push_back(log(strength[i])), x.push_back(log(size[i]));
     }
 
 
-    cout << "Trapezoidal Rule: Function 1" << endl;
-    cout << "T10=" << fixed << setprecision(4) << trapezoidal(10, F1::eval, 1, 2) << " E10=" << fixed << setprecision(4)
-         << abs(trapezoidal(10, F1::eval, 1, 2) - F1::TV) / F1::TV * 100 << endl;
-    cout << "T100=" << fixed << setprecision(4) << trapezoidal(100, F1::eval, 1, 2) << " E100=" << fixed
-         << setprecision(4) << abs(trapezoidal(100, F1::eval, 1, 2) - F1::TV) / F1::TV * 100 << endl;
+    cout << "ln(l)\t\tln(S)" << endl;
+    for (int i = 0; i < n; i++) {
+        cout << x[i] << "\t\t" << y[i] << endl;
+    }
 
+    LeastSquares<double> ls(x, y);
+    double m = ls.m();
+    double c = ls.c();
 
-    cout << endl << "Simpsons Rule: Function 1" << endl;
-    cout << "T10=" << fixed << setprecision(4) << simpsons(10, F1::eval, 1, 2) << " E10=" << fixed << setprecision(7)
-         << abs(simpsons(10, F1::eval, 1, 2) - F1::TV) / F1::TV * 100 << endl;
-    cout << "T100=" << fixed << setprecision(7) << simpsons(100, F1::eval, 1, 2) << " E100=" << fixed << setprecision(7)
-         << abs(simpsons(100, F1::eval, 1, 2) - F1::TV) / F1::TV * 100 << endl;
+    cout << endl;
+    cout << "a = " << -c << endl;
+    cout << "k = " << exp(m) << endl;
 
-    cout << endl << "Trapezoidal Rule: Function 2" << endl;
-    cout << "T10=" << fixed << setprecision(4) << trapezoidal(10, F2::eval, exp(1), 5) << " E10=" << fixed
-         << setprecision(4) << abs(trapezoidal(10, F2::eval, exp(1), 5) - F2::TV) / F2::TV * 100 << endl;
-    cout << "T100=" << fixed << setprecision(4) << trapezoidal(100, F2::eval, exp(1), 5) << " E100=" << fixed
-         << setprecision(4) << abs(trapezoidal(100, F2::eval, exp(1), 5) - F2::TV) / F2::TV * 100 << endl;
+    auto k = exp(m);
+    auto a = -c;
 
-    cout << endl << "Simpsons Rule: Function 2" << endl;
-    cout << "T10=" << fixed << setprecision(4) << simpsons(10, F2::eval, exp(1), 5) << " E10=" << fixed
-         << setprecision(9) << abs(simpsons(10, F2::eval, exp(1), 5) - F2::TV) / F2::TV * 100 << endl;
-    cout << "T100=" << fixed << setprecision(7) << simpsons(100, F2::eval, exp(1), 5) << " E100=" << fixed
-         << setprecision(9) << abs(simpsons(100, F2::eval, exp(1), 5) - F2::TV) / F2::TV * 100 << endl;
+    double S1 = k * pow(1000, -a);
 
+    cout << endl;
+    cout << "S1 = " << S1 << endl;
 
-    cout << endl << "Generating plots..." << endl;
-    plot(xt, ytf1, 1, "trapezoidal")
-    ? cout << "Trapezoidal rule for f1 succeeded" << endl
-    : cerr << "Trapezoidal rule for f1 failed" << endl;
+    double A1, A2, A3, A4;
 
-    plot(xt, ytf2, 2, "trapezoidal")
-    ? cout << "Trapezoidal rule for f2 succeeded" << endl
-    : cerr << "Trapezoidal rule for f2 failed" << endl;
+    A1 = 0.36 * S1 * 1e6 / Hp;
+    A2 = 0.64 * S1 * 1e6 - FOS * unitWeight * miningHeight;
+    A3 = -2 * FOS * unitWeight * miningHeight * Wg;
+    A4 = -1 * FOS * unitWeight * miningHeight * Wg * Wg;
 
-    plot(xs, ysf1, 1, "simpsons")
-    ? cout << "Simpsons rule for f1 succeeded" << endl
-    : cerr << "Simpsons rule for f1 failed" << endl;
+    cout << endl;
+    cout << "A1 = " << A1 << endl;
+    cout << "A2 = " << A2 << endl;
+    cout << "A3 = " << A3 << endl;
+    cout << "A4 = " << A4 << endl;
 
-    plot(xs, ysf2, 2, "simpsons")
-    ? cout << "Simpsons rule for f2 succeeded" << endl
-    : cerr << "Simpsons rule for f2 failed" << endl;
+    auto g = [=](double x) {
+        return A1 * x * x * x + A2 * x * x + A3 * x + A4;
+    };
+    auto dg = [=](double x) {
+        return 3 * A1 * x * x + 2 * A2 * x + A3;
+    };
+
+    NewtonRaphson<double> nr;
+    cout << endl;
+    cout << "Width of Pillar = " << nr.solve(g, dg, 50.0, 1e-4) << endl;
+
+    // Assignment Part
+    double ROLL_NUMBER_LAST_DIGIT = 3;  // 18MI31033
+
+    vector<double> galleryWidths = {3, 3.6, 4, 4.2, 4.8};
+    vector<double> verticalDepths = {
+            60 + ROLL_NUMBER_LAST_DIGIT,
+            90 + ROLL_NUMBER_LAST_DIGIT,
+            120 + ROLL_NUMBER_LAST_DIGIT,
+            150 + ROLL_NUMBER_LAST_DIGIT,
+            240 + ROLL_NUMBER_LAST_DIGIT,
+            360 + ROLL_NUMBER_LAST_DIGIT,
+    };
+    vector<vector<double>> answerTable;
+
+    for (auto &d: verticalDepths) {
+        vector<double> pillarWidths;
+        for (auto &w: galleryWidths) {
+            A1 = 0.36 * S1 * 1e6 / Hp;
+            A2 = 0.64 * S1 * 1e6 - FOS * unitWeight * d;
+            A3 = -2 * FOS * unitWeight * d * w;
+            A4 = -1 * FOS * unitWeight * d * w * w;
+
+            auto f = [=](double x) {
+                return A1 * x * x * x + A2 * x * x + A3 * x + A4;
+            };
+            auto df = [=](double x) {
+                return 3 * A1 * x * x + 2 * A2 * x + A3;
+            };
+
+            pillarWidths.push_back(nr.solve(f, df, 50.0, 1e-4));
+        }
+        answerTable.push_back(pillarWidths);
+    }
+
+    cout << endl << "\t\t";
+    for (auto &w: galleryWidths)
+        cout << fixed << setprecision(1) << w << "    \t\t";
+
+    cout << endl;
+    cout << "--------------------------------------------------------------------------------------" << endl;
+
+    int i = 0;
+    for (auto &row: answerTable) {
+        cout << (int) verticalDepths[i++] << "\t\t";
+
+        for (auto &col: row)
+            cout << fixed << setprecision(4) << col << "\t\t";
+
+        cout << endl;
+    }
 
     return 0;
-};
+}
