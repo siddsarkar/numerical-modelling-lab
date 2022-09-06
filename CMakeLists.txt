@@ -3,4 +3,4 @@ project(numerical_modelling_lab)
 
 set(CMAKE_CXX_STANDARD 23)
 
-add_executable(numerical_modelling_lab main.cpp pbPlot/pbPlots.cpp pbPlot/supportLib.cpp lab_01.cpp)
+add_executable(numerical_modelling_lab main.cpp pbPlot/pbPlots.cpp pbPlot/supportLib.cpp lab_01.cpp lab_02.cpp)

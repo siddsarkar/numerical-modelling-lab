@@ -131,7 +131,7 @@ bool plot(vector<double> &xs, vector<double> &ys, int fn, const string &rule) {
     return success;
 }
 
-void exec() {
+void exec_labOne() {
     int n = 100;
 
     vector<double> xs, ytf1, ysf1, xt, ytf2, ysf2;

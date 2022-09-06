@@ -52,7 +52,7 @@ public:
     }
 };
 
-int main() {
+int exec_labTwo() {
     double FOS = 1.35;
 
     cout << "ENTER DESIRED FOS: " << endl;
@@ -68,7 +68,7 @@ int main() {
 
     double Wg = 4.5;
     double Hp = 3.0;
-    double unitWeight = 2.6 * 1e3;
+    double unitWeight = 2.6 * 1e3 * 9.81;
     double miningHeight = 200.0;
 
     vector<double> y, x;
@@ -124,7 +124,7 @@ int main() {
 
     NewtonRaphson<double> nr;
     cout << endl;
-    cout << "Width of Pillar = " << nr.solve(g, dg, 50.0, 1e-4) << endl;
+    cout << "Width of Pillar = " << nr.solve(g, dg, 100.0, 1e-4) << endl;
 
     // Assignment Part
     double ROLL_NUMBER_LAST_DIGIT = 3;  // 18MI31033
@@ -155,7 +155,7 @@ int main() {
                 return 3 * A1 * x * x + 2 * A2 * x + A3;
             };
 
-            pillarWidths.push_back(nr.solve(f, df, 50.0, 1e-4));
+            pillarWidths.push_back(nr.solve(f, df, 100.0, 1e-4));
         }
         answerTable.push_back(pillarWidths);
     }

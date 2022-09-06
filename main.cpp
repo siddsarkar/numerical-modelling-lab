@@ -1,177 +1,155 @@
-#include <cassert>
-#include <iomanip>
-#include <numeric>
-#include <vector>
 #include <iostream>
+#include <numeric>
 #include <valarray>
+#include <vector>
+
+#define ND -1
 
 using namespace std;
 
-template<typename T>
-class LeastSquares {
-public:
-    LeastSquares(const vector<T> &x, const vector<T> &y) {
-        assert(x.size() == y.size());
+void plot_variogram(vector<int> &h, vector<float> &semi_variance,
+                    string label) {
+  // number of fits, number of points per fit
+  size_t const n_fits = 10;
+  size_t const n_points_per_fit = 10;
 
-        n = x.size();
-        sum_x = accumulate(x.begin(), x.end(), 0.0);
-        sum_y = accumulate(y.begin(), y.end(), 0.0);
-        sum_x2 = accumulate(x.begin(), x.end(), 0.0,
-                            [](double a, double b) { return a + b * b; });
-        sum_xy = 0.0;
-        for (int i = 0; i < n; ++i) sum_xy += x[i] * y[i];
+  // model ID and number of model parameters
+  int const model_id = GAUSS_1D;
+  size_t const n_model_parameters = 4;
+
+  // initial parameters
+  vector<REAL> initial_parameters(n_fits * n_model_parameters);
+
+  // data
+  vector<REAL> data(n_points_per_fit * n_fits);
+
+  // tolerance
+  REAL const tolerance = 0.001f;
+
+  // maximum number of iterations
+  int const max_number_iterations = 10;
+
+  // estimator ID
+  int const estimator_id = LSE;
+
+  // parameters to fit (all of them)
+  vector<int> parameters_to_fit = {
+      accumulate(h.begin(), h.end(), 0.0) / h.size(),
+      accumulate(semi_variance.begin(), semi_variance.end(), 0.0) /
+          semi_variance.size(),
+      0,
+  };
+
+  // output parameters
+  vector<REAL> output_parameters(n_fits * n_model_parameters);
+  vector<int> output_states(n_fits);
+  vector<REAL> output_chi_square(n_fits);
+  vector<int> output_number_iterations(n_fits);
+
+  /***************************** call to gpufit  ****************************/
+
+  int const status =
+      gpufit(n_fits, n_points_per_fit, data.data(), 0, model_id,
+             initial_parameters.data(), tolerance, max_number_iterations,
+             parameters_to_fit.data(), estimator_id, 0, 0,
+             output_parameters.data(), output_states.data(),
+             output_chi_square.data(), output_number_iterations.data());
+
+  /****************************** status check  *****************************/
+
+  if (status != ReturnState::OK) {
+    throw runtime_error(gpufit_get_last_error());
+  }
+}
+
+vector<double> horizontal(vector<vector<double>> data, int lag) {
+  int n = data.size();
+  int m = data[0].size();
+  double s = 0;
+  double p = 0;
+  for (int i = 0; i < n; i++) {
+    for (int j = 0; j < m - lag; j++) {
+      if (data[i][j] != ND && data[i][j + lag] != ND) {
+        s += pow(data[i][j] - data[i][j + lag], 2);
+        p += 1;
+      }
     }
+  }
+  return {s / p};
+}
 
-    double m() {
-        return (sum_y * sum_x2 - sum_x * sum_xy) / (n * sum_x2 - sum_x * sum_x);
+vector<double> vertical(vector<vector<double>> data, int lag) {
+  int n = data.size();
+  int m = data[0].size();
+  double s = 0;
+  double p = 0;
+  for (int i = 0; i < n - lag; i++) {
+    for (int j = 0; j < m; j++) {
+      if (data[i][j] != ND && data[i + lag][j] != ND) {
+        s += pow(data[i][j] - data[i + lag][j], 2);
+        p += 1;
+      }
     }
+  }
+  return {s / p};
+}
 
-    double c() {
-        return (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x * sum_x);
+vector<double> inclined(vector<vector<double>> data, int lag) {
+  int n = data.size();
+  int m = data[0].size();
+  double s = 0;
+  double p = 0;
+  for (int i = 0; i < n - lag; i++) {
+    for (int j = 0; j < m - lag; j++) {
+      if (data[i][j] != ND && data[i + lag][j + lag] != ND) {
+        s += pow(data[i][j] - data[i + lag][j + lag], 2);
+        p += 1;
+      }
     }
+  }
+  return {s / p};
+}
 
-private:
-    int n;
-    double sum_x, sum_y, sum_x2, sum_xy;
-};
-
-template<typename T>
-class NewtonRaphson {
-public:
-    double solve(auto f, auto fd, double x0, double eps) {
-        double x1 = x0 - f(x0) / fd(x0);
-        try {
-            while (abs(x1 - x0) > eps) {
-                x0 = x1;
-                x1 = x0 - f(x0) / fd(x0);
-            }
-        } catch (...) {
-            cout << "Error: " << x0 << endl;
-        }
-        return x1;
-    }
-};
+// def semivariogram_plotting(semivariance):
+//"""
+// Plot the semivariogram.
+//"""
+// p0 = [np.mean(h), np.mean(semivariance), 0]
+// cof , cov = curve_fit(models.gaussian, h, semivariance, p0)
+// print("range: %.2f   sill: %.f   nugget: %.2f" % (cof[0], cof[1], cof[2]))
+// xi =np.linspace(h[0], h[-1])
+// yi = [models.gaussian(h, *cof) for h in xi]
+// plt.plot(h, semivariance, 'og')
+// plt.plot(xi, yi, '-b')
+// plt.show()
+//  convert above to c++ code using gpufit and pbPlots
 
 int main() {
-    double FOS = 1.35;
+  vector<vector<double>> data = {{44, ND, 40, 42, 40, 39, 37, 36, ND},
+                                 {42, ND, 43, 42, 39, 39, 41, 40, 36},
+                                 {37, 37, 37, 35, 38, 37, 37, 33, 34},
+                                 {35, 38, ND, 35, 37, 36, 36, 35, ND},
+                                 {36, 35, 36, 35, 39, 33, 32, 29, 28},
+                                 {38, 37, 35, ND, 30, ND, 29, 30, 32}};
 
-    cout << "ENTER DESIRED FOS: " << endl;
-    cin >> FOS;
+  vector<int> h = {100, 200, 300, 400, 500, 600};
 
-    int n = 4;
+  vector<double> semi_variance_horizontal;
+  for (int i = 1; i < 6; i++) {
+    semi_variance_horizontal.push_back(horizontal(data, i)[0]);
+  }
 
-    vector<double> size(n);
-    vector<double> strength(n);
+  vector<double> semi_variance_vertical;
+  for (int i = 1; i < 6; i++) {
+    semi_variance_vertical.push_back(vertical(data, i)[0]);
+  }
 
-    size = {25, 50, 75, 100};
-    strength = {18, 10, 7, 6};
+  vector<double> semi_variance_inclined;
+  for (int i = 1; i < 6; i++) {
+    semi_variance_inclined.push_back(inclined(data, i)[0]);
+  }
 
-    double Wg = 4.5;
-    double Hp = 3.0;
-    double unitWeight = 2.6 * 1e3;
-    double miningHeight = 200.0;
+  plot_variogram(h, semi_variance_horizontal, "Horizontal");
 
-    vector<double> y, x;
-    for (int i = 0; i < n; i++) {
-        y.push_back(log(strength[i])), x.push_back(log(size[i]));
-    }
-
-
-    cout << "ln(l)\t\tln(S)" << endl;
-    for (int i = 0; i < n; i++) {
-        cout << x[i] << "\t\t" << y[i] << endl;
-    }
-
-    LeastSquares<double> ls(x, y);
-    double m = ls.m();
-    double c = ls.c();
-
-    cout << endl;
-    cout << "a = " << -c << endl;
-    cout << "k = " << exp(m) << endl;
-
-    auto k = exp(m);
-    auto a = -c;
-
-    double S1 = k * pow(1000, -a);
-
-    cout << endl;
-    cout << "S1 = " << S1 << endl;
-
-    double A1, A2, A3, A4;
-
-    A1 = 0.36 * S1 * 1e6 / Hp;
-    A2 = 0.64 * S1 * 1e6 - FOS * unitWeight * miningHeight;
-    A3 = -2 * FOS * unitWeight * miningHeight * Wg;
-    A4 = -1 * FOS * unitWeight * miningHeight * Wg * Wg;
-
-    cout << endl;
-    cout << "A1 = " << A1 << endl;
-    cout << "A2 = " << A2 << endl;
-    cout << "A3 = " << A3 << endl;
-    cout << "A4 = " << A4 << endl;
-
-    auto g = [=](double x) {
-        return A1 * x * x * x + A2 * x * x + A3 * x + A4;
-    };
-    auto dg = [=](double x) {
-        return 3 * A1 * x * x + 2 * A2 * x + A3;
-    };
-
-    NewtonRaphson<double> nr;
-    cout << endl;
-    cout << "Width of Pillar = " << nr.solve(g, dg, 50.0, 1e-4) << endl;
-
-    // Assignment Part
-    double ROLL_NUMBER_LAST_DIGIT = 3;  // 18MI31033
-
-    vector<double> galleryWidths = {3, 3.6, 4, 4.2, 4.8};
-    vector<double> verticalDepths = {
-            60 + ROLL_NUMBER_LAST_DIGIT,
-            90 + ROLL_NUMBER_LAST_DIGIT,
-            120 + ROLL_NUMBER_LAST_DIGIT,
-            150 + ROLL_NUMBER_LAST_DIGIT,
-            240 + ROLL_NUMBER_LAST_DIGIT,
-            360 + ROLL_NUMBER_LAST_DIGIT,
-    };
-    vector<vector<double>> answerTable;
-
-    for (auto &d: verticalDepths) {
-        vector<double> pillarWidths;
-        for (auto &w: galleryWidths) {
-            A1 = 0.36 * S1 * 1e6 / Hp;
-            A2 = 0.64 * S1 * 1e6 - FOS * unitWeight * d;
-            A3 = -2 * FOS * unitWeight * d * w;
-            A4 = -1 * FOS * unitWeight * d * w * w;
-
-            auto f = [=](double x) {
-                return A1 * x * x * x + A2 * x * x + A3 * x + A4;
-            };
-            auto df = [=](double x) {
-                return 3 * A1 * x * x + 2 * A2 * x + A3;
-            };
-
-            pillarWidths.push_back(nr.solve(f, df, 50.0, 1e-4));
-        }
-        answerTable.push_back(pillarWidths);
-    }
-
-    cout << endl << "\t\t";
-    for (auto &w: galleryWidths)
-        cout << fixed << setprecision(1) << w << "    \t\t";
-
-    cout << endl;
-    cout << "--------------------------------------------------------------------------------------" << endl;
-
-    int i = 0;
-    for (auto &row: answerTable) {
-        cout << (int) verticalDepths[i++] << "\t\t";
-
-        for (auto &col: row)
-            cout << fixed << setprecision(4) << col << "\t\t";
-
-        cout << endl;
-    }
-
-    return 0;
+  return 0;
 }
