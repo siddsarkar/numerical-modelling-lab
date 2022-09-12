@@ -1,155 +1,125 @@
-#include <iostream>
-#include <numeric>
-#include <valarray>
 #include <vector>
+#include <valarray>
+#include <iostream>
 
-#define ND -1
+#define ND 0
+#define MAX_ITERATIONS 10000
 
 using namespace std;
 
-void plot_variogram(vector<int> &h, vector<float> &semi_variance,
-                    string label) {
-  // number of fits, number of points per fit
-  size_t const n_fits = 10;
-  size_t const n_points_per_fit = 10;
-
-  // model ID and number of model parameters
-  int const model_id = GAUSS_1D;
-  size_t const n_model_parameters = 4;
-
-  // initial parameters
-  vector<REAL> initial_parameters(n_fits * n_model_parameters);
-
-  // data
-  vector<REAL> data(n_points_per_fit * n_fits);
-
-  // tolerance
-  REAL const tolerance = 0.001f;
-
-  // maximum number of iterations
-  int const max_number_iterations = 10;
-
-  // estimator ID
-  int const estimator_id = LSE;
-
-  // parameters to fit (all of them)
-  vector<int> parameters_to_fit = {
-      accumulate(h.begin(), h.end(), 0.0) / h.size(),
-      accumulate(semi_variance.begin(), semi_variance.end(), 0.0) /
-          semi_variance.size(),
-      0,
-  };
-
-  // output parameters
-  vector<REAL> output_parameters(n_fits * n_model_parameters);
-  vector<int> output_states(n_fits);
-  vector<REAL> output_chi_square(n_fits);
-  vector<int> output_number_iterations(n_fits);
-
-  /***************************** call to gpufit  ****************************/
-
-  int const status =
-      gpufit(n_fits, n_points_per_fit, data.data(), 0, model_id,
-             initial_parameters.data(), tolerance, max_number_iterations,
-             parameters_to_fit.data(), estimator_id, 0, 0,
-             output_parameters.data(), output_states.data(),
-             output_chi_square.data(), output_number_iterations.data());
-
-  /****************************** status check  *****************************/
-
-  if (status != ReturnState::OK) {
-    throw runtime_error(gpufit_get_last_error());
-  }
-}
-
-vector<double> horizontal(vector<vector<double>> data, int lag) {
-  int n = data.size();
-  int m = data[0].size();
-  double s = 0;
-  double p = 0;
-  for (int i = 0; i < n; i++) {
-    for (int j = 0; j < m - lag; j++) {
-      if (data[i][j] != ND && data[i][j + lag] != ND) {
-        s += pow(data[i][j] - data[i][j + lag], 2);
-        p += 1;
-      }
+template<typename T>
+class Project {
+public:
+    Project(const string &name,
+            const vector<T> &year,
+            const vector<T> &operating_cost,
+            const vector<T> &capital_cost,
+            const vector<T> &revenue,
+            const T tax_rate,
+            const T discount_rate
+    ) {
+        this->name = name;
+        this->year = year;
+        this->operating_cost = operating_cost;
+        this->capital_cost = capital_cost;
+        this->revenue = revenue;
+        this->discount_rate = discount_rate;
+        this->tax_rate = tax_rate;
     }
-  }
-  return {s / p};
-}
 
-vector<double> vertical(vector<vector<double>> data, int lag) {
-  int n = data.size();
-  int m = data[0].size();
-  double s = 0;
-  double p = 0;
-  for (int i = 0; i < n - lag; i++) {
-    for (int j = 0; j < m; j++) {
-      if (data[i][j] != ND && data[i + lag][j] != ND) {
-        s += pow(data[i][j] - data[i + lag][j], 2);
-        p += 1;
-      }
+    float getNpv() {
+        float npv = 0.0;
+        for (int i = 0; i < year.size(); ++i) {
+            auto cf = ((revenue[i] - operating_cost[i]) * (1 - tax_rate / 100) - capital_cost[i]);
+            npv += cf / pow(1 + discount_rate / 100, year[i]);
+        }
+        return npv;
     }
-  }
-  return {s / p};
-}
 
-vector<double> inclined(vector<vector<double>> data, int lag) {
-  int n = data.size();
-  int m = data[0].size();
-  double s = 0;
-  double p = 0;
-  for (int i = 0; i < n - lag; i++) {
-    for (int j = 0; j < m - lag; j++) {
-      if (data[i][j] != ND && data[i + lag][j + lag] != ND) {
-        s += pow(data[i][j] - data[i + lag][j + lag], 2);
-        p += 1;
-      }
+    float getIrr() {
+        float r = 2;
+        float eps = 0.01;
+
+        for (int x = 0; x < MAX_ITERATIONS; ++x) {
+            float n = 0.0;
+            float d = 0.0;
+            for (int i = 0; i < year.size(); ++i) {
+                auto cf = ((revenue[i] - operating_cost[i]) * (1 - tax_rate / 100) - capital_cost[i]);
+                n += cf / pow(1 + r / 100, year[i]);
+                d += ((-year[i]) * cf) / pow(1 + r / 100, year[i] + 1);
+            }
+
+            if (abs(n / d) < eps)
+                return r;
+            else
+                r -= n / d;
+        }
+
+        return r;
     }
-  }
-  return {s / p};
-}
 
-// def semivariogram_plotting(semivariance):
-//"""
-// Plot the semivariogram.
-//"""
-// p0 = [np.mean(h), np.mean(semivariance), 0]
-// cof , cov = curve_fit(models.gaussian, h, semivariance, p0)
-// print("range: %.2f   sill: %.f   nugget: %.2f" % (cof[0], cof[1], cof[2]))
-// xi =np.linspace(h[0], h[-1])
-// yi = [models.gaussian(h, *cof) for h in xi]
-// plt.plot(h, semivariance, 'og')
-// plt.plot(xi, yi, '-b')
-// plt.show()
-//  convert above to c++ code using gpufit and pbPlots
+    string getName() {
+        return name;
+    }
+
+private:
+    string name;
+    vector<T> year;
+    vector<T> operating_cost;
+    vector<T> capital_cost;
+    vector<T> revenue;
+    T discount_rate;
+    T tax_rate;
+};
+
 
 int main() {
-  vector<vector<double>> data = {{44, ND, 40, 42, 40, 39, 37, 36, ND},
-                                 {42, ND, 43, 42, 39, 39, 41, 40, 36},
-                                 {37, 37, 37, 35, 38, 37, 37, 33, 34},
-                                 {35, 38, ND, 35, 37, 36, 36, 35, ND},
-                                 {36, 35, 36, 35, 39, 33, 32, 29, 28},
-                                 {38, 37, 35, ND, 30, ND, 29, 30, 32}};
 
-  vector<int> h = {100, 200, 300, 400, 500, 600};
+    Project p1 = Project("Panihati Coal Block",
+                         {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+                         {ND, ND, ND, 30, 32, 33, 36, 37, 38, 34, 35},
+                         {100, 85, 30, ND, ND, ND, ND, ND, ND, ND, ND},
+                         {ND, ND, ND, 80, 85, 90, 88, 92, 96, 75, 80},
+                         33.20, 15.5);
 
-  vector<double> semi_variance_horizontal;
-  for (int i = 1; i < 6; i++) {
-    semi_variance_horizontal.push_back(horizontal(data, i)[0]);
-  }
+    cout << p1.getName() << endl;
+    cout << "NPV: " << p1.getNpv() << endl;
+    cout << "IRR: " << p1.getIrr() << endl << endl;
 
-  vector<double> semi_variance_vertical;
-  for (int i = 1; i < 6; i++) {
-    semi_variance_vertical.push_back(vertical(data, i)[0]);
-  }
 
-  vector<double> semi_variance_inclined;
-  for (int i = 1; i < 6; i++) {
-    semi_variance_inclined.push_back(inclined(data, i)[0]);
-  }
+    Project p2 = Project("Ekchakra Coal Block",
+                         {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+                         {ND, ND, 35, 30, 32, 33, 36, 37, 38, 34, 35},
+                         {150, 65, ND, ND, ND, ND, ND, ND, ND, ND, ND},
+                         {ND, ND, 65, 65, 95, 90, 76, 99, 88, 77, 94},
+                         33.8, 14.5);
 
-  plot_variogram(h, semi_variance_horizontal, "Horizontal");
+    cout << p2.getName() << endl;
+    cout << "NPV: " << p2.getNpv() << endl;
+    cout << "IRR: " << p2.getIrr() << endl << endl;
 
-  return 0;
+    Project p3 = Project("Remuna Coal Block",
+                         {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+                         {ND, 45, 35, 30, 32, 33, 36, 37, 38, 34, 35},
+                         {200, ND, ND, ND, ND, ND, ND, ND, ND, ND, ND},
+                         {ND, 80, 85, 75, 91, 95, 87, 95, 79, 81, 97},
+                         35.50, 15.0);
+
+    cout << p3.getName() << endl;
+    cout << "NPV: " << p3.getNpv() << endl;
+    cout << "IRR: " << p3.getIrr() << endl << endl;
+
+    Project p4 = Project("Bhadradri Coal Block",
+                         {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10},
+                         {ND, 51, 53, 36, 33, 39, 40, 42, 46, 43, 53},
+                         {200, ND, ND, ND, ND, ND, ND, ND, ND, ND, ND},
+                         {ND, 90, 95, 80, 117, 96, 119, 95, 129, 83, 95},
+                         34.50, 15.5);
+
+    cout << p4.getName() << endl;
+    cout << "NPV: " << p4.getNpv() << endl;
+    cout << "IRR: " << p4.getIrr() << endl;
+
+
+    return 0;
 }

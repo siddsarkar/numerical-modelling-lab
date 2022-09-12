@@ -131,7 +131,7 @@ bool plot(vector<double> &xs, vector<double> &ys, int fn, const string &rule) {
     return success;
 }
 
-void exec_labOne() {
+int lab_01() {
     int n = 100;
 
     vector<double> xs, ytf1, ysf1, xt, ytf2, ysf2;
@@ -202,4 +202,6 @@ void exec_labOne() {
     plot(xs, ysf2, 2, "simpsons")
     ? cout << "Simpsons rule for f2 succeeded" << endl
     : cerr << "Simpsons rule for f2 failed" << endl;
+
+    return 0;
 };

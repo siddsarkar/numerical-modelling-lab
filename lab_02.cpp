@@ -52,7 +52,7 @@ public:
     }
 };
 
-int exec_labTwo() {
+int lab_02() {
     double FOS = 1.35;
 
     cout << "ENTER DESIRED FOS: " << endl;
