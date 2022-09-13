@@ -5,6 +5,8 @@
 #include <iostream>
 #include <valarray>
 
+#define MAX_ITERATIONS 10000
+
 using namespace std;
 
 template<typename T>
@@ -39,15 +41,17 @@ template<typename T>
 class NewtonRaphson {
 public:
     double solve(auto f, auto fd, double x0, double eps) {
-        double x1 = x0 - f(x0) / fd(x0);
-        try {
-            while (abs(x1 - x0) > eps) {
+        double x1 = 0.0;
+
+        for (int x = 0; x < MAX_ITERATIONS; ++x) {
+            x1 = x0 - f(x0) / fd(x0);
+
+            if (abs(x1 - x0) < eps)
+                return x1;
+            else
                 x0 = x1;
-                x1 = x0 - f(x0) / fd(x0);
-            }
-        } catch (...) {
-            cout << "Error: " << x0 << endl;
         }
+
         return x1;
     }
 };
